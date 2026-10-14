@@ -1,0 +1,14 @@
+# dsh-cite-inline —— DSH bundle patch
+#
+# 挂载声明：DSH 启动时按 bundle 层栈叠加各插件 patch，本文件把插件插入
+# Desktop / Web profile 的配置树。
+#
+# 安装（本地目录，Desktop 用 desktop profile）：
+#   dsh plugin --profile desktop add link:<本目录绝对路径>
+#
+# 安装后重启目标 profile。bundle 已负责注册，不要再手工把同名 id 写进
+# profile 的 cordis.patch.yml，否则会重复挂载。
+
+- insert:
+    - id: dsh-cite-inline
+      name: dsh-cite-inline

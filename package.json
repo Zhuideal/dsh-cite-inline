@@ -1,0 +1,55 @@
+{
+  "name": "dsh-cite-inline",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Inline citation for DSH: quote text from an assistant reply into the composer as a reference chip, and copy a session's native id from the sidebar menu.",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "cite",
+    "quote",
+    "inline-reference",
+    "reference-chip",
+    "session-id"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Zhuideal/dsh-cite-inline.git"
+  },
+  "homepage": "https://github.com/Zhuideal/dsh-cite-inline",
+  "bugs": {
+    "url": "https://github.com/Zhuideal/dsh-cite-inline/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [],
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}

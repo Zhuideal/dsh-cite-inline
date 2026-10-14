@@ -1,0 +1,12 @@
+# Normalize line endings so the checkout behaves the same on every platform.
+# The build script writes LF; keeping LF in the working tree avoids the
+# CRLF churn that would otherwise show up as spurious diffs on Windows.
+* text=auto eol=lf
+
+# Binary assets, if any are added later
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.woff2 binary

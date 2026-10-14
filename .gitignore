@@ -1,0 +1,17 @@
+# Dependencies (this plugin ships none of its own;
+# the host supplies React and the DSH client packages)
+node_modules/
+
+# Logs and local scratch
+*.log
+*.tmp
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local environment overrides
+.env
+.env.local
