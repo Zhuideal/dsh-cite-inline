@@ -283,8 +283,28 @@ const RC2 = {
     // projectUserText() maps `@"…"` to exactly one chip whose label is the
     // token's inner text. Keeping the body INSIDE the quotes is what stops the
     // quote from spilling out under the bubble as a second plain run.
-    assert.equal(text, '@"hello world"')
+    //
+    // The leading space is part of the contract, not cosmetic: the scanner's
+    // `(^|\s)` group is mandatory, so a token glued onto the preceding
+    // character is not recognised at all. Assert it against the real regex
+    // rather than by string equality, so the test states the actual contract.
+    assert.equal(text, ' @"hello world"')
     assert.equal(text.split('\n').length, 1, 'a newline would split the token in two')
+    assert.ok(/^\s/u.test(text), 'a separator must precede the token')
+  })
+  check('the serialized token is recognised by projectUserText\'s scanner', async () => {
+    // Verbatim from ui-primitives lib/index.js:6724.
+    const SCANNER = /(^|\s)(\/[\w-]+(?=\s|$)|@"[^"\n]+"|@[^\s]+)/gu
+    const token = await h.registered[0].codec.serialize('quote-fixed')
+    // Model text is a chip preceded by whatever the user typed before it: the
+    // worst case is a chip appended directly after a word, with no separator
+    // of its own. That is the shape that used to spill.
+    for (const wire of [`东西${token}`, `word${token}`, token]) {
+      SCANNER.lastIndex = 0
+      const hits = [...wire.matchAll(SCANNER)].filter(m => m[2].startsWith('@"'))
+      assert.equal(hits.length, 1, `exactly one chip for: ${JSON.stringify(wire)}`)
+      assert.equal(hits[0][2], '"hello world"'.replace(/^/, '@'), 'token text is intact')
+    }
   })
   check('codec clipboardText matches the chip label for copy/persistence', () => {
     assert.equal(h.registered[0].codec.clipboardText('quote-fixed'), 'hello world')
@@ -297,6 +317,17 @@ const RC2 = {
     const call = h.calls.at(-1)
     assert.equal(call.ref.label, 'first line second line third')
     assert.ok(!call.ref.label.includes('\n'), 'label must be single-line')
+  })
+  check('a backslash in the selection cannot truncate the chip label', () => {
+    // displayLabel splits the label on [\\/] and keeps the LAST segment, so an
+    // unnormalized Windows path collapses the chip to the text after its final
+    // backslash. Both separators must be neutralized.
+    h.select('C:\\Users\\<user>\\node_modules\\dsh-quote-to-chat is the target')
+    h.button().click()
+    const label = h.calls.at(-1).ref.label
+    assert.ok(!label.includes('\\'), 'no backslash may survive into the label')
+    assert.ok(label.startsWith('C:'), 'the label must keep the whole passage')
+    assert.ok(label.includes('dsh-quote-to-chat is the target'), 'the tail must survive')
   })
   check('the toolbar exposes add + copy and neutralises mousedown', () => {
     const buttons = h.action.children.filter(c => c.tagName === 'button')

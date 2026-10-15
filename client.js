@@ -125,7 +125,10 @@ const ASSISTANT_REPLY_SELECTOR = '[data-chat-flow-kind="assistant-step"]'
      *    (same meaning, no delimiter collision).
      *  - a slash makes the renderer treat the label as a file path and keep
      *    only the last segment, silently dropping the rest of the quote, so
-     *    it becomes a look-alike division slash.
+     *    it becomes a look-alike division slash. A backslash does exactly the
+     *    same: displayLabel splits on `[\\/]`, so a Windows path in the
+     *    selection (`C:\\Users\\...`) would otherwise collapse the chip to the
+     *    text after its final backslash. Both separators are normalized.
      *
      * Length is deliberately NOT trimmed here — the chip's ellipsis owns that,
      * and truncating would also shorten what the model reads.
@@ -138,7 +141,7 @@ const ASSISTANT_REPLY_SELECTOR = '[data-chat-flow-kind="assistant-step"]'
       const line = text
         .replace(/\s+/gu, ' ')
         .replace(/"/gu, '\u201d')
-        .replace(/\//gu, '\u2215')
+        .replace(/[\\/]/gu, '\u2215')
         .trim()
       return line === '' ? t('emptyQuote') : line
     }
@@ -423,7 +426,14 @@ const ASSISTANT_REPLY_SELECTOR = '[data-chat-flow-kind="assistant-step"]'
             // because the token text IS the model text.
             // `quote.label` is the same single-line text the composer chip
             // shows, so both surfaces stay in step.
-            return `@"${quote.label}"`
+            // The LEADING SPACE is load-bearing. The scanner regex is
+            // /(^|\s)(...|@"[^"\n]+"|...)/gu, and that `(^|\s)` group is
+            // mandatory: a token glued straight onto the preceding character
+            // is never recognised, and the whole quote then spills as plain
+            // text with its literal `@"` and closing `"` visible. A chip
+            // inserted immediately after a word has no separator of its own,
+            // so emit one. `\s` also covers the message-start case.
+            return ` @"${quote.label}"`
           },
         },
       }

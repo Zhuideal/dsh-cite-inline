@@ -157,7 +157,11 @@ const wire = await registered[0].codec.serialize('q1')
 console.log('serialize() ->')
 console.log('  ' + wire)
 console.log('  single line        :', !wire.includes('\n'))
-console.log('  whole body inside  :', wire.startsWith('@"') && wire.endsWith('"'))
+// The wire form is ` @"body"`: the leading separator is required by
+// projectUserText's `(^|\s)` group, so assert the trimmed token instead.
+const token = wire.trim()
+console.log('  whole body inside  :', token.startsWith('@"') && token.endsWith('"'))
+console.log('  leading separator  :', /^\s/u.test(wire), '(mandatory for the sent-bubble scanner)')
 
 console.log('\n== step 4: retired chrome must be absent ==')
 for (const sel of ['[data-dsh-cite-inline-rail]', '[data-dsh-cite-inline-marker]', '[data-dsh-cite-inline-preview]']) {

@@ -86,17 +86,32 @@ DSH 原生的 `.refChip` 是 `display: inline` + `white-space: inherit` + `overf
 
 代价是引号内的文本会原样进模型 prompt，但这也正是我们要的：模型读到的是完整引用。
 
-### 三个必须替换的字符
+### 四个必须处理的字符
 
-标签在 `compactLabel()` 里做三处归一化，每一处都对应 `projectUserText` 的一个真实行为：
+标签在 `compactLabel()` 里做归一化，每一处都对应 `projectUserText` 的一个真实行为：
 
 | 原字符 | 替换为 | 不替换的后果 |
 |---|---|---|
 | 换行 / 连续空白 | 单个空格 | token 正则是 `@"[^"\n]+"`，换行会把 token 劈成两半，chip 退化成纯文本 |
 | `"` | `”`（右双引号） | 提前闭合 token，后半段作为 plain run 泄漏到气泡里 |
 | `/` | `∕`（除法斜杠） | 渲染器把它当文件路径，`displayLabel` 只保留最后一段，引用内容被悄悄截掉 |
+| `\` | `∕`（同上） | 同上：`displayLabel` 按 `[\\/]` 切分，Windows 路径（`C:\Users\…`）会让 chip 只剩最后一个反斜杠之后的文字 |
 
-后两条是实测发现的：`see src/client/foo.ts for details` 会被渲染成只有 `foo.ts for details`。用 `tools/sent-chip.test.mjs` 可以直接复现。
+后三条是实测发现的：`see src/client/foo.ts for details` 会被渲染成只有 `foo.ts for details`；`C:\Users\<user>\node_modules\dsh-quote-to-chat 是…` 会只剩 `dsh-quote-to-chat 是…`。用 `tools/sent-chip.test.mjs` 可以直接复现。
+
+### token 前必须有一个分隔符
+
+`serialize()` 返回的是 **` @"全文"`（注意前导空格）**，不是 `@"全文"`。
+
+扫描正则（`ui-primitives` `lib/index.js:6724`）是：
+
+```js
+const re = /(^|\s)(\/[\w-]+(?=\s|$)|@"[^"\n]+"|@[^\s]+)/gu;
+```
+
+开头的 `(^|\s)` 是**必需**的，它要求 token 前面要么是字符串开头，要么是一个空白字符。chip 紧跟在用户已输入的文字后面时（例如 `删掉这个重复的东西` + chip），token 自己没有分隔符，`(^|\s)` 匹配失败，整段引用会连同字面量 `@"` 和结尾的 `"` 一起泄漏成纯文本——就是「第二个引用自己展开了」那个现象。换行符也是 `\s`，所以两行各放一个 chip 时不会出问题，只有同一行紧贴文字时才会。
+
+`tools/port.test.mjs` 与 `tools/sent-chip.test.mjs` 都按 5 种前缀（消息开头 / CJK 词后 / ASCII 词后 / 全角逗号后 / 换行后）覆盖了这个契约。
 
 ## 与上游的关键差异
 
@@ -175,8 +190,8 @@ if (ctx.conversation?.draftContexts === undefined) {
 2. **会话定位**：`sessions.list.getSnapshot().current` → 新版 `retainedBy.mainView`（保留旧版 `current` 兼容）
 3. **chip 皮肤**：注入官方主题 token 的浅蓝胶囊，同时覆盖输入框 chip 与已发送消息 chip；并把已发送 chip 的 `display` 从 `inline` 改为 `inline-block`，否则 `max-width` 与省略号都不生效
 4. **chip 图标**：`insertReference` 传 `appearance: 'session'`，`@` 字标换成对话气泡图标
-5. **序列化格式**：`` serialize() 返回单个 `@"全文"` token ``，全文放进引号内，气泡不再溢出
-6. **标签归一化**：换行折叠成空格，`"` → `”`，`/` → `∕`（三处都是为了让 token 不被正则或路径切分逻辑破坏）
+5. **序列化格式**：`` serialize() 返回单个 ` @"全文"` token ``（前导空格是契约的一部分，见上节），全文放进引号内，气泡不再溢出
+6. **标签归一化**：换行折叠成空格，`"` → `”`，`/` 和 `\` → `∕`（都是为了让 token 不被正则或路径切分逻辑破坏）
 7. **工具条**：单按钮浮钮 → 「添加到对话｜复制」小横条，`mousedown` 中和以保住选区
 8. **复制动作**：异步 Clipboard API + `execCommand` 兜底
 9. **移除旧 UI**：上游的「N 条注释」浮标、回复内的编号徽章、悬浮预览卡全部退役——目标设计里没有它们，且浮标会在输入框旁露出一枚裸 i18n 键

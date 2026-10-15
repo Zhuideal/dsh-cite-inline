@@ -79,13 +79,23 @@ const render = n => {
 
 // The plugin's own label normalizer, lifted from the built bundle so this test
 // exercises the real code path rather than a copy of it.
-const clientSrc = await readFile(new URL('../client.js', import.meta.url), 'utf8')
+// CLIENT_JS lets a caller point at an alternative build (used to prove this
+// test actually fails when the serialize() separator is removed).
+const clientPath = process.env.CLIENT_JS || new URL('../client.js', import.meta.url)
+const clientSrc = await readFile(clientPath, 'utf8')
 const lm = /function compactLabel\(text, t\) \{[\s\S]*?\n    \}/.exec(clientSrc)
 if (!lm) throw new Error('could not lift compactLabel from client.js')
 const lab = { exports: {} }
 runInNewContext(lm[0] + '\nmodule.exports = compactLabel', { module: lab, console }, { filename: 'label.js' })
 const compactLabel = lab.exports
 const t = key => (key === 'emptyQuote' ? '助手引用' : key)
+
+// The wire form must also come from the bundle, not from a literal here:
+// a hardcoded `' @"' + body + '"'` would keep passing even if serialize()
+// dropped its leading separator — exactly the regression this test exists for.
+const sm = /return `([^`]*)\$\{quote\.label\}([^`]*)`/.exec(clientSrc)
+if (!sm) throw new Error('could not lift the serialize() template from client.js')
+const wireFor = label => sm[1] + label + sm[2]
 
 const CASES = {
   'short quote': '单次请求体量巨大。',
@@ -96,39 +106,60 @@ const CASES = {
 }
 
 let failures = 0
+
+// Each quote is checked in the shape that actually reaches the bubble: the
+// serialized token appended straight after whatever the user had already typed.
+// That is the failing case from the screenshots — a chip inserted immediately
+// after a word, with no separator of its own. The scanner's `(^|\s)` group is
+// mandatory, so the token must carry its own leading separator.
+const PREFIXES = {
+  'at message start': '',
+  'after a CJK word (the reported bug)': '删掉这个重复的东西',
+  'after an ASCII word': 'word',
+  'after a full-width comma': '内容，',
+  'after a newline': '前一段\n',
+}
+
 for (const [name, raw] of Object.entries(CASES)) {
   // Exactly what the plugin does: normalize, then wrap as the sent token.
   const body = compactLabel(raw, t)
-  const wire = '@"' + body + '"'
-  const out = projectUserText(wire, [], [], 'skill', undefined)
+  // Mirror serialize(): the leading separator is part of the wire form, and it
+  // is lifted from the bundle so a regression in serialize() fails this test.
+  const token = wireFor(body)
 
-  const flat = []
-  const walk = n => {
-    if (n === null || n === undefined) return
-    if (Array.isArray(n)) { n.forEach(walk); return }
-    if (n.tag !== undefined) flat.push(n)
-    if (n.props?.children) walk(n.props.children)
+  for (const [prefixName, prefix] of Object.entries(PREFIXES)) {
+    const wire = prefix + token
+    const out = projectUserText(wire, [], [], 'skill', undefined)
+
+    const flat = []
+    const walk = n => {
+      if (n === null || n === undefined) return
+      if (Array.isArray(n)) { n.forEach(walk); return }
+      if (n.tag !== undefined) flat.push(n)
+      if (n.props?.children) walk(n.props.children)
+    }
+    walk(out)
+
+    const chips = flat.filter(n => n.props?.['data-chip'] !== undefined || n.props?.['data-ref-chip'] !== undefined)
+    // Only the plain runs that come AFTER the prefix count as spill.
+    const visiblePlain = flat
+      .filter(n => n.props?.className === 'p')
+      .map(render)
+      .filter(t => t.trim() !== '' && !prefix.includes(t.trim()) && t.trim() !== prefix.trim())
+
+    const chipText = chips.map(render).join('')
+    // The chip must show the normalized body verbatim, and nothing may spill.
+    const ok = chips.length === 1 && visiblePlain.length === 0 && chipText === body
+    if (!ok) failures += 1
+
+    console.log((ok ? 'ok   ' : 'FAIL ') + name + ' — ' + prefixName)
+    console.log('       raw   =' + JSON.stringify(raw).slice(0, 100))
+    console.log('       label =' + JSON.stringify(body).slice(0, 100))
+    console.log('       chips=' + chips.length + '  leftover plain runs=' + visiblePlain.length)
+    console.log('       chip kind=' + (chips[0]?.props?.['data-ref-chip'] ?? '-') + '  chip text=' + JSON.stringify(chipText).slice(0, 90))
+    if (visiblePlain.length > 0) console.log('       SPILLED: ' + JSON.stringify(visiblePlain.join('')).slice(0, 120))
+    if (chipText !== body) console.log('       MISMATCH: chip text differs from the normalized label')
   }
-  walk(out)
-
-  const chips = flat.filter(n => n.props?.['data-ref-chip'] !== undefined)
-  const visiblePlain = flat
-    .filter(n => n.props?.className === 'p')
-    .map(render)
-    .filter(t => t.trim() !== '')
-
-  const chipText = chips.map(render).join('')
-  // The chip must show the normalized body verbatim, and nothing may spill.
-  const ok = chips.length === 1 && visiblePlain.length === 0 && chipText === body
-  if (!ok) failures += 1
-
-  console.log((ok ? 'ok   ' : 'FAIL ') + name)
-  console.log('       raw   =' + JSON.stringify(raw).slice(0, 100))
-  console.log('       label =' + JSON.stringify(body).slice(0, 100))
-  console.log('       chips=' + chips.length + '  leftover plain runs=' + visiblePlain.length)
-  console.log('       chip kind=' + (chips[0]?.props?.['data-ref-chip'] ?? '-') + '  chip text=' + JSON.stringify(chipText).slice(0, 90))
-  if (visiblePlain.length > 0) console.log('       SPILLED: ' + JSON.stringify(visiblePlain.join('')).slice(0, 120))
-  if (chipText !== body) console.log('       MISMATCH: chip text differs from the normalized label')
 }
 
 console.log('\n' + (failures === 0 ? 'all rendered as a single chip, nothing spilled' : failures + ' case(s) failed'))

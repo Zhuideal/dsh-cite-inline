@@ -220,7 +220,14 @@ replaceOnce(
   "            // because the token text IS the model text.\n" +
   "            // `quote.label` is the same single-line text the composer chip\n" +
   "            // shows, so both surfaces stay in step.\n" +
-  "            return `@\"${quote.label}\"`\n" +
+  "            // The LEADING SPACE is load-bearing. The scanner regex is\n" +
+  "            // /(^|\\s)(...|@\"[^\"\\n]+\"|...)/gu, and that `(^|\\s)` group is\n" +
+  "            // mandatory: a token glued straight onto the preceding character\n" +
+  "            // is never recognised, and the whole quote then spills as plain\n" +
+  "            // text with its literal `@\"` and closing `\"` visible. A chip\n" +
+  "            // inserted immediately after a word has no separator of its own,\n" +
+  "            // so emit one. `\\s` also covers the message-start case.\n" +
+  "            return ` @\"${quote.label}\"`\n" +
   "          },",
   'serialize as an @-quoted token'
 )
@@ -755,7 +762,10 @@ replaceOnce(
   "     *    (same meaning, no delimiter collision).\n" +
   "     *  - a slash makes the renderer treat the label as a file path and keep\n" +
   "     *    only the last segment, silently dropping the rest of the quote, so\n" +
-  "     *    it becomes a look-alike division slash.\n" +
+  "     *    it becomes a look-alike division slash. A backslash does exactly the\n" +
+  "     *    same: displayLabel splits on `[\\\\/]`, so a Windows path in the\n" +
+  "     *    selection (`C:\\\\Users\\\\...`) would otherwise collapse the chip to the\n" +
+  "     *    text after its final backslash. Both separators are normalized.\n" +
   "     *\n" +
   "     * Length is deliberately NOT trimmed here — the chip's ellipsis owns that,\n" +
   "     * and truncating would also shorten what the model reads.\n" +
@@ -768,7 +778,7 @@ replaceOnce(
   "      const line = text\n" +
   "        .replace(/\\s+/gu, ' ')\n" +
   "        .replace(/\"/gu, '\\u201d')\n" +
-  "        .replace(/\\//gu, '\\u2215')\n" +
+  "        .replace(/[\\\\/]/gu, '\\u2215')\n" +
   "        .trim()\n" +
   "      return line === '' ? t('emptyQuote') : line\n" +
   "    }",
