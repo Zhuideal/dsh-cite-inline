@@ -1,6 +1,6 @@
 {
   "name": "dsh-cite-inline",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Inline citation for DSH: quote text from an assistant reply into the composer as a reference chip, and copy a session's native id from the sidebar menu.",
   "type": "module",
