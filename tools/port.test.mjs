@@ -57,7 +57,7 @@ class Element extends EventTarget {
 /** rc.2 session row: `id` is the row identity and the byId key. */
 const row = (id, retainedBy) => ({ id, displayTitle: id, retainedBy: retainedBy ?? {}, running: false, blank: false, updatedAt: 0 })
 
-function boot({ catalog, sessionId, withSession = true, slots: slotsMode = 'present', requireMode = 'ok' }) {
+function boot({ catalog, sessionId, withSession = true }) {
   const document = new Element('document')
   document.head = new Element('head'); document.body = new Element('body')
   document.append(document.head, document.body)
@@ -130,48 +130,8 @@ function boot({ catalog, sessionId, withSession = true, slots: slotsMode = 'pres
   const effects = []
   let dict = {}
 
-  // Slot pipeline + React/primitives doubles for the sidebar menu row.
-  // `slotsMode: 'absent'` and `requireMode: 'throws'` model the two ways the
-  // row's surroundings can be missing, which must stay non-fatal.
-  const slotRows = []
-  const copyCalls = []
-  const stateSets = []
-  const mountEffects = []
-  const makeSlots = () => ({
-    inject: (_name, cb) => { const d = cb(); return typeof d === 'function' ? d : () => {} },
-    register: (options, component) => { slotRows.push({ options, component }); return () => {} },
-  })
-  const slotsService = slotsMode === 'absent' ? undefined : makeSlots()
-  const requireImpl = id => {
-    if (requireMode === 'throws') throw new Error('module loader refused ' + id)
-    if (requireMode === 'partial') return {}
-    if (id === 'react') {
-      return {
-        createElement: (type, props, ...children) => ({ type, props: { ...(props ?? {}), children } }),
-        useState: initial => {
-          const cell = { value: typeof initial === 'function' ? initial() : initial }
-          cell.set = value => { cell.value = value; stateSets.push(value) }
-          return [cell.value, cell.set]
-        },
-        useEffect: fn => { mountEffects.push(fn) },
-      }
-    }
-    if (id === '@deepseek-ai/dsh-client-ui-primitives') {
-      return {
-        MenuItemButton: 'MenuItemButton',
-        IconCopyOutlineRegular: 'IconCopyOutlineRegular',
-        writeClipboard: text => {
-          copyCalls.push(text)
-          return Promise.resolve(requireMode !== 'copy-fails')
-        },
-      }
-    }
-    return {}
-  }
-
   const ctx = {
     effect: cb => { const d = cb(); if (typeof d === 'function') effects.push(d) },
-    get: name => (name === 'slots' ? slotsService : undefined),
     locale: {
       register: (_ns, dictionaries) => { dict = dictionaries.zh; return () => {} },
       bind: () => (key, params = {}) => dict[key].replace(/\{(\w+)\}/gu, (_m, n) => params[n]),
@@ -189,7 +149,9 @@ function boot({ catalog, sessionId, withSession = true, slots: slotsMode = 'pres
   let dispose
   window.__ModuleLoader__ = { load: ({ id, factory }) => {
     assert.equal(id, 'dsh-cite-inline', 'bundle must register under its own package id')
-    const mod = factory(requireImpl)
+    // Stock DSH client bundles are loaded with no `require` in scope; the
+    // factory must not depend on one.
+    const mod = factory()
     assert.equal(mod.name, 'dsh-cite-inline')
     dispose = mod.apply(ctx)
   } }
@@ -202,7 +164,6 @@ function boot({ catalog, sessionId, withSession = true, slots: slotsMode = 'pres
   return {
     document, reply, other, registered, calls, snapshot,
     world: { window, document },
-    slotRows, copyCalls, stateSets, mountEffects,
     dispose: () => { dispose?.(); for (const e of effects.toReversed()) e() },
     setClipboardWrite: fn => { clipboardWrite = fn },
     publish,
@@ -439,102 +400,22 @@ const RC2 = {
   })
 }
 
-// 7. sidebar session-menu row (copy session id)
+// 7. no duplicate "copy session ID" menu row
+// DSH 0.2.1 ships that row itself (ui-workspace `SessionIdMenuItem`, the last
+// built-in item of a session's ⋯ menu). Registering a second row into
+// `sidebar.workspaces.session.menu.item` would show two identically-labelled
+// entries, so this plugin must not touch that slot at all.
 {
-  const h = boot({ catalog: RC2, sessionId: 'main' })
-
-  check('registers one row into the stock session-menu roster slot', () => {
-    assert.equal(h.slotRows.length, 1, 'exactly one slot registration')
-    const [row] = h.slotRows
-    assert.equal(row.options.name, 'sidebar.workspaces.session.menu.item')
-    assert.equal(row.options.id, 'dsh-cite-inline-copy-session-id')
-    assert.equal(row.options.order, 250, 'sits between rename (200) and fork (300)')
-    assert.equal(row.options.locale, 'cite-inline', 'row copy comes from our namespace')
-    assert.equal(typeof row.component, 'function', 'row is a component')
+  check('does not register a duplicate copy-session-id menu row', () => {
+    assert.ok(!source.includes('sidebar.workspaces.session.menu.item'), 'session menu slot is untouched')
+    assert.ok(!source.includes('menuCopySessionId'), 'no menu-row label')
+    assert.ok(!source.includes('menuCopied'), 'no menu-row copied state')
+    assert.ok(!source.includes('CopySessionId'), 'no menu-row component')
   })
-
-  check('the row renders through the official MenuItemButton with a copy icon', () => {
-    const [row] = h.slotRows
-    const tree = row.component({
-      sessionId: 'sess-42',
-      t: key => key,
-      useMenuOpenState: () => [true, () => {}],
-    })
-    assert.equal(tree.type, 'MenuItemButton', 'uses the official styled menu row')
-    assert.equal(tree.props.icon.type, 'IconCopyOutlineRegular', 'leading copy glyph')
-    assert.equal(typeof tree.props.onSelect, 'function')
-    assert.deepEqual(tree.props.children, ['menuCopySessionId'], 'idle label')
+  check('the client factory takes no `require` (stock loader passes none)', () => {
+    assert.ok(source.includes('factory: () => {'), 'factory signature stays zero-arg')
+    assert.ok(!/\brequire\(/.test(source), 'no module-loader require in the bundle')
   })
-
-  check('selecting the row copies the addressed session id', async () => {
-    const [row] = h.slotRows
-    const tree = row.component({
-      sessionId: 'sess-42',
-      t: key => key,
-      useMenuOpenState: () => [true, () => {}],
-    })
-    tree.props.onSelect()
-    await new Promise(r => setTimeout(r, 0))
-    assert.deepEqual(h.copyCalls, ['sess-42'], 'clipboard received the native session id')
-    assert.deepEqual(h.stateSets, [true], 'row switched to its copied state')
-  })
-
-  check('a refused copy closes the menu instead of claiming success', async () => {
-    const h2 = boot({ catalog: RC2, sessionId: 'main', requireMode: 'copy-fails' })
-    const [row] = h2.slotRows
-    let closed = 0
-    const tree = row.component({
-      sessionId: 'sess-9',
-      t: key => key,
-      useMenuOpenState: () => [true, () => { closed += 1 }],
-    })
-    tree.props.onSelect()
-    await new Promise(r => setTimeout(r, 0))
-    assert.equal(closed, 1, 'the menu is dismissed')
-    assert.equal(h2.stateSets.includes(true), false, 'no copied state on failure')
-    h2.dispose()
-  })
-
-  check('a successful copy arms the delayed menu close', () => {
-    const h2 = boot({ catalog: RC2, sessionId: 'main' })
-    const [row] = h2.slotRows
-    assert.equal(h2.mountEffects.length, 0, 'no effect before render')
-    row.component({
-      sessionId: 'sess-42',
-      t: key => key,
-      useMenuOpenState: () => [true, () => {}],
-    })
-    assert.equal(h2.mountEffects.length, 1, 'the auto-close effect is wired')
-    h2.dispose()
-  })
-
-  check('a missing slots service leaves the plugin fully working', () => {
-    const h2 = boot({ catalog: RC2, sessionId: 'main', slots: 'absent' })
-    assert.equal(h2.slotRows.length, 0, 'nothing registered')
-    h2.select('still works')
-    assert.equal(h2.action.hidden, false, 'composer toolbar unaffected')
-    h2.button().click()
-    assert.equal(h2.calls.length, 1, 'chip insertion unaffected')
-    h2.dispose()
-  })
-
-  check('a require that throws leaves the plugin fully working', () => {
-    const h2 = boot({ catalog: RC2, sessionId: 'main', requireMode: 'throws' })
-    assert.equal(h2.slotRows.length, 0)
-    h2.select('still works')
-    assert.equal(h2.action.hidden, false)
-    h2.dispose()
-  })
-
-  check('primitives without the menu exports leave the plugin fully working', () => {
-    const h2 = boot({ catalog: RC2, sessionId: 'main', requireMode: 'partial' })
-    assert.equal(h2.slotRows.length, 0, 'row skipped rather than half-registered')
-    h2.select('still works')
-    assert.equal(h2.action.hidden, false)
-    h2.dispose()
-  })
-
-  h.dispose()
 }
 
 for (const run of queue) await run()

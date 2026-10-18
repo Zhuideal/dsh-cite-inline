@@ -16,7 +16,7 @@
 // Rebuild with tools/build-client.cjs; verify with tools/port.test.mjs.
 window.__ModuleLoader__.load({
   id: 'dsh-cite-inline',
-  factory: require => {
+  factory: () => {
     'use strict'
 
     const STYLE_ID = 'dsh-cite-inline-style'
@@ -27,10 +27,6 @@ window.__ModuleLoader__.load({
     // inserts back to the codec below by this name, so it doubles as the
     // filter that separates our occurrences from other sources' chips.
     const QUOTE_SOURCE = 'dsh-cite-inline-quote'
-    // Stock roster slot for one row in a session's sidebar menu. The workspace
-    // browser renders every registrant; the parent slot supplies the
-    // `useMenuOpenState` hook, so a row gets menu-close without owning the menu.
-    const SESSION_MENU_SLOT = 'sidebar.workspaces.session.menu.item'
     // Assistant prose rows. ui-chat wraps every chat node in a div carrying
 // `data-chat-flow-kind` and registers the `assistant-step` node kind, so this
 // is the chat surface's real DOM contract. Upstream used the fork-only
@@ -42,8 +38,6 @@ const ASSISTANT_REPLY_SELECTOR = '[data-chat-flow-kind="assistant-step"]'
       copy: '复制',
       copied: '已复制',
       toolbarLabel: '选中文本操作',
-      menuCopySessionId: '复制会话 ID',
-      menuCopied: '会话 ID 已复制',
       selectedText: '所选文本：',
       removeReference: '删除引用',
       addedOne: '已添加 1 条引用',
@@ -61,8 +55,6 @@ const ASSISTANT_REPLY_SELECTOR = '[data-chat-flow-kind="assistant-step"]'
       copy: 'Copy',
       copied: 'Copied',
       toolbarLabel: 'Selection actions',
-      menuCopySessionId: 'Copy session ID',
-      menuCopied: 'Session ID copied',
       selectedText: 'Selected text:',
       removeReference: 'Remove reference',
       addedOne: '1 reference added',
@@ -450,77 +442,6 @@ const ASSISTANT_REPLY_SELECTOR = '[data-chat-flow-kind="assistant-step"]'
       window.addEventListener('scroll', onViewportChange, true)
       const sessionsOff = ctx.sessions.list.subscribe(observeCurrentInput)
       const localeOff = ctx.locale.subscribe(refreshLocalizedCopy)
-      // ── sidebar session-menu row: copy the session's native id ───────────
-      // Rides stock DSH's public roster slot. The workspace browser renders
-      // every registrant into each session's ⋯ menu, the parent slot injects
-      // `useMenuOpenState` (how a row closes that menu), and MenuItemButton
-      // supplies the official row material — label, icon column, hover, dark
-      // theme — so this plugin owns no menu CSS at all.
-      //
-      // Guarded end to end on purpose. A menu row is a convenience: it must
-      // never break the composer feature, and above all it must never let
-      // apply() throw. A throwing client entry is exactly what drives DSH into
-      // its boot-failure recovery, whose "disable all plugins" path rewrites
-      // package.json's bundles down to the two core entries and loses the
-      // whole profile.
-      try {
-        const slots = typeof ctx.get === 'function' ? ctx.get('slots') : undefined
-        if (slots !== undefined && typeof slots.inject === 'function' && typeof slots.register === 'function' && typeof require === 'function') {
-          const React = require('react')
-          const primitives = require('@deepseek-ai/dsh-client-ui-primitives')
-          const writeClipboard = primitives.writeClipboard
-          const MenuItemButton = primitives.MenuItemButton
-          const IconCopy = primitives.IconCopyOutlineRegular
-          if (typeof writeClipboard === 'function' && MenuItemButton !== undefined && IconCopy !== undefined) {
-            const CopySessionIdRow = props => {
-              const [copied, setCopied] = React.useState(false)
-              const t = typeof props.t === 'function' ? props.t : key => key
-              // The parent slot owns the menu; this hook is the only way to
-              // close it, and it is absent outside the sidebar's roster.
-              const hooks = typeof props.useMenuOpenState === 'function' ? props.useMenuOpenState() : undefined
-              const setMenuOpen = Array.isArray(hooks) ? hooks[1] : undefined
-              const closeMenu = () => { if (typeof setMenuOpen === 'function') setMenuOpen(false) }
-              // Hold the menu open briefly so the confirmation is readable,
-              // then close — the same shape the official rename row uses.
-              React.useEffect(() => {
-                if (!copied) return undefined
-                const timer = setTimeout(closeMenu, 900)
-                return () => { clearTimeout(timer) }
-              }, [copied])
-              const onSelect = () => {
-                if (copied) return
-                const settle = ok => { if (ok === true) setCopied(true); else closeMenu() }
-                let result
-                try {
-                  result = writeClipboard(String(props.sessionId))
-                } catch (error) {
-                  console.warn('[dsh-cite-inline] copy session id failed:', error)
-                  closeMenu()
-                  return
-                }
-                if (result !== null && typeof result === 'object' && typeof result.then === 'function') {
-                  result.then(settle, closeMenu)
-                  return
-                }
-                settle(result)
-              }
-              return React.createElement(MenuItemButton, {
-                icon: React.createElement(IconCopy, {}),
-                onSelect,
-              }, t(copied ? 'menuCopied' : 'menuCopySessionId'))
-            }
-            ctx.effect(() => slots.inject(SESSION_MENU_SLOT, () => slots.register({
-              name: SESSION_MENU_SLOT,
-              id: 'dsh-cite-inline-copy-session-id',
-              order: 250,
-              locale: LOCALE_NS,
-              inject: () => ({}),
-            }, CopySessionIdRow)), 'dsh-cite-inline: session menu row')
-          }
-        }
-      } catch (error) {
-        console.warn('[dsh-cite-inline] session menu row unavailable:', error)
-      }
       observeCurrentInput()
 
       return () => {

@@ -2,7 +2,7 @@
   "name": "dsh-cite-inline",
   "version": "0.1.1",
   "private": true,
-  "description": "Inline citation for DSH: quote text from an assistant reply into the composer as a reference chip, and copy a session's native id from the sidebar menu.",
+  "description": "Inline citation for DSH: quote text from an assistant reply into the composer as a reference chip.",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -27,8 +27,7 @@
     "cite",
     "quote",
     "inline-reference",
-    "reference-chip",
-    "session-id"
+    "reference-chip"
   ],
   "license": "MIT",
   "repository": {

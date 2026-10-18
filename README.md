@@ -11,33 +11,8 @@
 3. 继续正常打字或直接发送；chip 随消息一起发出，在用户气泡里**仍是胶囊**（鼠标悬浮可见全文）
 4. chip 是原子节点：Backspace 整枚删除
 5. 界面跟随 DSH 语言（中/英），切换语言即时刷新
-6. 侧边栏会话行的 `⋯` 菜单多一项**复制会话 ID**（点一下复制该会话的原生 id，菜单短暂停留显示「会话 ID 已复制」再关闭）
 
-## 复制会话 ID：为什么不需要改核心
-
-DSH 自带公开插槽 `sidebar.workspaces.session.menu.item`。工作区浏览器会把**每一个注册者**渲染进会话的 `⋯` 菜单，父插槽还会注入 `useMenuOpenState`（行用来关闭所在菜单的钩子）。官方自己的「置顶 / 重命名 / 分叉 / 归档」就是四行注册：
-
-```js
-ctx.slots.inject('sidebar.workspaces.session.menu.item', function* () {
-  yield ctx.slots.register({ name: ..., id: 'pin',    order: 100, locale: NS, inject: pinInjected },    PinSessionMenuItem)
-  yield ctx.slots.register({ name: ..., id: 'rename', order: 200, locale: NS, inject: renameInjected }, RenameSessionMenuItem)
-  // fork 300, archive 400 …
-})
-```
-
-所以本插件只做一次注册，`order: 250` 落在「重命名」和「分叉会话」之间。行本身用官方 `MenuItemButton` 渲染 —— 那是 ui-primitives 导出的菜单行组件，自带官方 `Menu.module.css` 类名，因此**配色、hover、图标列、深色主题全部自动一致**，插件不写一行菜单样式。
-
-（`dsh-cite` 上游为这个功能维护了一份核心补丁 `0001-web-session-row-menu-slot.patch`，改的是 `ui-workspace` 的 `Rows.tsx` 等文件。那是给旧版 DSH 的；rc.2 已把该扩展点做进内核，所以这里**不需要**任何核心改动。）
-
-### 为什么整段代码都被 try/catch 包住
-
-这是刻意的。一个菜单行只是便利功能，它**绝不能**让 `apply()` 抛异常 —— 抛异常的客户端 entry 正是把 DSH 推进启动失败恢复、进而清空 profile 的原因。所以：
-
-- `slots` 服务用 `ctx.get('slots')` 探测，**不写进 `inject` 数组**（声明了却等不到服务会让 fiber 卡在 `pending`，那同样是启动失败）
-- `require` 缺失、react/primitives 取不到、`writeClipboard` 不是函数 —— 任一情况都只是**跳过这一行**，其余功能不受影响
-- 剪贴板失败时关闭菜单，而不是假装复制成功
-
-`tools/port.test.mjs` 里有三条专门的断言守这条底线：`slots` 缺失、`require` 抛错、primitives 只返回空对象时，工具条与插入 chip 功能**全部照常工作**。
+> **已移除：侧边栏「复制会话 ID」菜单行。** DSH 0.2.1 起官方自带这一项（会话 `⋯` 菜单最后一条，文案 `复制 Session ID`，复制成功提示 `Session ID 已复制`，由 `ui-workspace` 的 `SessionIdMenuItem` 渲染），本插件再注册一行只会让同一个菜单里出现两个同名条目，因此该功能已删除。插件现在只做一件事：把助手回复里的选区变成引用 chip。
 
 ## chip 长什么样
 
@@ -147,14 +122,14 @@ dsh plugin --profile desktop remove dsh-cite-inline
 三套测试，全部零依赖、不需要浏览器：
 
 ```
-CLIENT_JS=./client.js node tools/port.test.mjs   # 契约测试（25 项）
+CLIENT_JS=./client.js node tools/port.test.mjs   # 契约测试（21 项）
 node tools/sent-chip.test.mjs                    # 发送后渲染测试（5 种选区）
 node tools/smoke.mjs                             # 端到端走一遍四步交互
 ```
 
 `sent-chip.test.mjs` **直接从已安装的 DSH 里读取**官方 `ui-primitives` 包：优先 app.asar（可用 `DSH_ASAR` 指定路径），若该构建把客户端包放在 profile 的 `node_modules` 里，则回退到那里（可用 `DSH_PRIMITIVES` 指定 `lib/index.js`）。因此不会读到过期副本，换机器或换 DSH 版本也跑得起来。
 
-**`tools/port.test.mjs`** —— 在一个**模仿官方 0.2.0-rc.2 契约的上下文**里加载真实 `client.js`，故意**不**提供 fork 专有的 `conversation.draftContexts` 与 `data-dsh-message-role`。因此一旦回退到 fork 契约，测试立刻失败。覆盖 25 项：启动不抛错、注册 `@` 引用源、从 `retainedBy.mainView` 定位会话、点击插入 chip、chip 带 `appearance:'session'`、codec 序列化成单个 `@"…"` token、多行选区折叠成单行、`clipboardText` 与标签一致、工具条含添加/复制两个动作、样式表同时覆盖两个面且只用官方 token、已废弃的 rail/marker/preview 不再挂载、非助手选区不触发、旧版 `current` 目录兼容、无会话时不插入、子 agent 会话不误判、删 chip 后引用失效、卸载清理；以及会话菜单行这一组的 8 项 —— 注册进官方插槽且 id/order/locale 正确、用 `MenuItemButton` 渲染、点击复制原生 session id、复制成功后置位、**复制被拒时关闭菜单而非假装成功**、复制成功后装载延时关闭 effect、以及 `slots` 缺失 / `require` 抛错 / primitives 缺导出这三种环境下**插件其余功能全部照常工作**。
+**`tools/port.test.mjs`** —— 在一个**模仿官方 0.2.0-rc.2 契约的上下文**里加载真实 `client.js`，故意**不**提供 fork 专有的 `conversation.draftContexts` 与 `data-dsh-message-role`。因此一旦回退到 fork 契约，测试立刻失败。覆盖 21 项：启动不抛错、注册 `@` 引用源、从 `retainedBy.mainView` 定位会话、点击插入 chip、chip 带 `appearance:'session'`、codec 序列化成单个 `@"…"` token、多行选区折叠成单行、`clipboardText` 与标签一致、工具条含添加/复制两个动作、样式表同时覆盖两个面且只用官方 token、已废弃的 rail/marker/preview 不再挂载、非助手选区不触发、旧版 `current` 目录兼容、无会话时不插入、子 agent 会话不误判、删 chip 后引用失效、卸载清理；另有两项**反向**断言守住已退役的会话菜单行 —— 打包产物不得再出现 `sidebar.workspaces.session.menu.item` / `menuCopySessionId` / `CopySessionId`，且 `factory` 必须保持零参、不得出现 `require(`。
 
 **`tools/sent-chip.test.mjs`** —— 从 asar 里抽出的**真实 `projectUserText()` 源码**，喂给它 5 种选区（短句、长段、含引号、含斜杠、多行），断言每种都渲染成**恰好一枚 chip 且零泄漏**。这是唯一能挡住「引用在气泡里展开」这类回归的测试。
 
@@ -195,7 +170,8 @@ if (ctx.conversation?.draftContexts === undefined) {
 7. **工具条**：单按钮浮钮 → 「添加到对话｜复制」小横条，`mousedown` 中和以保住选区
 8. **复制动作**：异步 Clipboard API + `execCommand` 兜底
 9. **移除旧 UI**：上游的「N 条注释」浮标、回复内的编号徽章、悬浮预览卡全部退役——目标设计里没有它们，且浮标会在输入框旁露出一枚裸 i18n 键
-10. **会话菜单行**：往官方插槽 `sidebar.workspaces.session.menu.item` 注册一行「复制会话 ID」，用官方 `MenuItemButton` 渲染；`factory` 改为接收 `require` 以取得 React 与 primitives
+
+（曾有过第 10 项「会话菜单行：注册一行『复制会话 ID』」，DSH 0.2.1 官方内置该菜单项后已整块删除，见开头说明。）
 
 `5125430` 自己的 `current` 读取在 rc.2 上恒为 `undefined`（该快照只有 `{ids, byId, phase, projectionsBySession}`），所以点按钮毫无反应——这正是上游 `904f259` 修的问题，本移植版把那个修复合并了进来。
 
@@ -208,7 +184,7 @@ if (ctx.conversation?.draftContexts === undefined) {
 移植工具在 `tools/`：
 
 - `tools/upstream-client.js` —— 上游 `5125430` 的 `client.js` 原文（MIT），作为补丁基线
-- `tools/build-client.cjs` —— 应用标识符重命名 + 两处移植补丁，生成 `client.js`，并在最后做「不含 fork 专有契约」的自检
+- `tools/build-client.cjs` —— 应用标识符重命名 + 移植补丁，生成 `client.js`，并在最后做「不含 fork 专有契约」的自检
 - `tools/port.test.mjs` —— 上述验证套件
 
 重建：
@@ -226,7 +202,7 @@ node tools/sent-chip.test.mjs
 2. 已发送 chip 的类名 `.mxScHa_reference.rtYPxa_chip`（皮肤覆盖用）
    —— 诊断：输入框里的 chip 没变成浅色胶囊。
 
-会话菜单行不在这张名单上：它走的是公开插槽，不依赖任何哈希类名。
+（会话菜单行已不在插件范围内，因此也不在这张名单上。）
 
 ## 许可证
 
