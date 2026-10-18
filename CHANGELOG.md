@@ -3,6 +3,73 @@
 本文件记录 `dsh-cite-inline` 的每个版本改了什么、为什么改。
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 0.2.0
+
+删掉「复制会话 ID」菜单行 —— 官方自己做了这一项，插件留着只会让菜单里出现两条同名项。
+
+### 移除（破坏性）
+
+**侧边栏会话 `⋯` 菜单里的「复制会话 ID」不再由本插件提供。**
+
+DSH 0.2.1 把这一项做进了内核：`ui-workspace` 的 `SessionIdMenuItem` 注册进
+`sidebar.workspaces.session.menu.item`，是会话菜单的**最后一条内置项**，文案
+`复制 Session ID`，复制成功提示 `Session ID 已复制`。
+
+所以截图里的菜单同时出现两行：
+
+```
+置顶会话
+重命名            Ctrl + Alt + G
+复制会话 ID              ← 本插件，order 250
+分叉会话          Ctrl + Alt + F
+归档会话          Ctrl + Shift + A
+复制 Session ID          ← 官方内置
+```
+
+官方实现和本插件那一行几乎是同一份代码 —— 同一个 `MenuItemButton`、同一个
+`IconCopyOutlineRegular`、同一个 `useMenuOpenState` 关菜单。既然如此，插件这一行
+不提供任何官方没有的能力，只制造重名。已整块删除。
+
+**功能没有消失**，只是改由 DSH 提供：菜单里那一行「复制 Session ID」照旧可点。
+
+### 顺带变化
+
+`factory` 回到零参。当初把 `factory: () => {}` 改成 `factory: require => {}`，唯一目的
+就是从模块加载器里取 React 与 primitives 来渲染那一行菜单；行没了，这个参数也就没有
+存在的理由。现在与所有官方客户端 bundle 的写法一致。
+
+`package.json` 的 description 与 keywords 里去掉了 session-id 相关内容。
+
+### 测试
+
+- 删掉菜单行那 8 项断言，换成 2 项**反向**断言：打包产物不得再出现
+  `sidebar.workspaces.session.menu.item` / `menuCopySessionId` / `CopySessionId`，
+  且 `factory` 必须保持零参、不得出现 `require(` —— 防止这次删除被下次构建悄悄还原
+- 契约测试 27 → **21 项**，其余全绿
+
+### 修复
+
+**`tools/sent-chip.test.mjs` 在 DSH 0.2.1 上根本跑不起来**
+
+它只在 `app.asar` 里找 `ui-primitives`，而 0.2.1 把客户端 UI 包挪出了 asar（asar 现在
+只装宿主半边），于是第一行就抛：
+
+```
+Error: not in asar: /dsh/node_modules/@deepseek-ai/dsh-client-ui-primitives/lib/index.js
+```
+
+一个用例都没跑。现在先逐个试 asar 候选（asar 存在但不含该包是正常情况），再回退到
+profile 的 `node_modules`，并打印实际用了哪一份。`DSH_ASAR` 与 `DSH_PRIMITIVES` 都能覆盖。
+
+### 升级方式
+
+```bash
+git pull
+```
+
+插件通过 `link:` 安装，无需重装。**必须重启 DSH** —— 宿主不会热挂载客户端代码变更
+（HMR 会重新合成 bundle，但页面仍需刷新一次）。
+
 ## 0.1.1
 
 修两个「引用胶囊退化成纯文本」的缺陷。两个都需要**先输入别的字再插入引用**才会触发，
