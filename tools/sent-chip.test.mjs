@@ -39,15 +39,47 @@ const ASAR_CANDIDATES = [
   'D:/Program/DeepSeek Harness/resources/app.asar',
   'D:/Program/DSH Desktop/resources/app.asar',
   'C:/Program Files/DeepSeek Harness/resources/app.asar',
+  'E:/program files/DeepSeek Harness/resources/app.asar',
 ].filter(Boolean)
 
-const asarPath = ASAR_CANDIDATES.find(p => existsSync(p))
-if (asarPath === undefined) {
-  throw new Error('DSH app.asar not found; set DSH_ASAR to its path. Tried:\n  ' + ASAR_CANDIDATES.join('\n  '))
+const PRIMITIVES_REL = '/dsh/node_modules/@deepseek-ai/dsh-client-ui-primitives/lib/index.js'
+
+// Newer desktop builds keep the client UI packages in the profile's
+// node_modules instead of inside app.asar (the asar only carries the host
+// half). Fall back to that copy rather than failing the whole suite: the code
+// under test — projectUserText — is the same file either way.
+const PROFILE_PRIMITIVES = [
+  process.env.DSH_PRIMITIVES,
+  'C:/Users/<user>/.dsh/profiles/node_modules/@deepseek-ai/dsh-client-ui-primitives/lib/index.js',
+  'C:/Users/<user>/.dsh/profiles/desktop/node_modules/@deepseek-ai/dsh-client-ui-primitives/lib/index.js',
+].filter(Boolean)
+
+let src
+let srcLabel
+for (const candidate of ASAR_CANDIDATES) {
+  if (!existsSync(candidate)) continue
+  try {
+    src = readFromAsar(candidate, PRIMITIVES_REL)
+    srcLabel = candidate
+    break
+  } catch {
+    // asar present but without the client packages — try the next source.
+  }
 }
-const src = readFromAsar(asarPath, '/dsh/node_modules/@deepseek-ai/dsh-client-ui-primitives/lib/index.js')
+if (src === undefined) {
+  const profile = PROFILE_PRIMITIVES.find(p => existsSync(p))
+  if (profile === undefined) {
+    throw new Error(
+      'DSH ui-primitives not found. Set DSH_ASAR (app.asar) or DSH_PRIMITIVES (lib/index.js). Tried:\n  ' +
+        [...ASAR_CANDIDATES, ...PROFILE_PRIMITIVES].join('\n  '),
+    )
+  }
+  src = await readFile(profile, 'utf8')
+  srcLabel = profile
+}
 const m = /function projectUserText\b[\s\S]*?\n}\n/m.exec(src)
-if (!m) throw new Error('could not lift projectUserText from ' + asarPath)
+if (!m) throw new Error('could not lift projectUserText from ' + srcLabel)
+console.log('projectUserText lifted from: ' + srcLabel)
 
 const lifted = [
   'const SESSION_WIRE_RE = /@\\[([^\\]\\n]+)\\]\\(dsh-session:[^)\\s]+\\)/gu;',
