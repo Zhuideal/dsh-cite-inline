@@ -18,6 +18,7 @@
     "lib",
     "client.js",
     "cordis.patch.yml",
+    "docs",
     "README.md"
   ],
   "keywords": [
