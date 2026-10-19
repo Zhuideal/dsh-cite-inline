@@ -681,6 +681,7 @@ replaceOnce(
   "      }",
   "        inputOff?.()\n" +
   "        action.remove()\n" +
+  "        document.getElementById(STYLE_ID)?.remove()\n" +
   "      }",
   'dispose: drop rail/marker/preview teardown'
 )
@@ -838,6 +839,28 @@ if (!REMOVE_QUOTE.test(code)) throw new Error('removeQuote anchor not found')
 code = code.replace(REMOVE_QUOTE, '')
 console.log('dropped unused removeQuote()')
 
+// ── patch 15: drop the hard hairline the elevation token adds to the toolbar ──
+// The toolbar asked for `var(--dsw-elevation-prominent, <soft shadow>)`. That
+// fallback is a plain soft shadow, but DSH *does* define the token, so the
+// fallback never applies. What it expands to is:
+//
+//   var(--dsw-elevation-stroke), 0 3px 8px 0 #0000000a, 0 0 20px 0 #0000000d
+//   --dsw-elevation-stroke: 0 0 0 .5px var(--dsw-alias-border-l4)   /* 16% */
+//
+// The first layer is a 0.5px solid ring, which reads as a hard "black edge"
+// around a floating bar sitting on top of prose. Measured on a white stage,
+// edge alpha is 0.106 with the ring and 0.020 without it.
+//
+// Keep the same two soft layers, but rebuild the ring from border-l2 at 40%.
+// border-l2 already carries the theme (10% black on light, 12% white on dark),
+// so the hairline survives as a faint outline instead of vanishing — which
+// matters on dark backgrounds, where black soft shadows are invisible.
+replaceOnce(
+  "box-shadow: var(--dsw-elevation-prominent, 0 6px 24px rgb(15 23 42 / 18%))",
+  "box-shadow: 0 0 0 .5px color-mix(in srgb, var(--dsw-alias-border-l2, #000) 40%, transparent), 0 3px 8px 0 #0000000a, 0 0 20px 0 #0000000d",
+  'toolbar: replace the hard elevation stroke with a faint ring'
+)
+
 fs.mkdirSync(OUT_DIR, { recursive: true })
 fs.writeFileSync(OUT, code, 'utf8')
 console.log('\nwrote ' + OUT + ' (' + Buffer.byteLength(code, 'utf8') + ' bytes)')
@@ -860,6 +883,16 @@ if (!codeOnly.includes('retainedBy')) problems.push('retainedBy fallback missing
 // Patch 14 removed these; they must not come back through an upstream refresh.
 if (codeOnly.includes('removeQuote')) problems.push('retired removeQuote() survived')
 if (codeOnly.includes('CARD_SELECTOR')) problems.push('retired CARD_SELECTOR survived')
+// Patch 15: the elevation token carries a 0.5px solid ring that renders as a
+// hard edge on the floating toolbar. Both the token and the raw stroke must stay
+// out, so an upstream refresh cannot quietly restore the heavy outline.
+if (codeOnly.includes('--dsw-elevation-prominent')) problems.push('elevation-prominent token reintroduced on the toolbar')
+if (codeOnly.includes('--dsw-elevation-stroke')) problems.push('hard elevation stroke reintroduced')
+if (!codeOnly.includes('--dsw-alias-border-l2, #000) 40%')) problems.push('faint toolbar ring missing')
+// The injected <style> must be removed on dispose, or a reload leaves a stale
+// copy behind and later style edits never take effect (the install is
+// id-guarded, so the old sheet wins).
+if (!codeOnly.includes('getElementById(STYLE_ID)?.remove()')) problems.push('style element not removed on dispose')
 // Match the dictionary-key SHAPE (indent + `key: 'value',`), not the bare
 // identifier: `selectedText` is also a live local variable, so a substring
 // check would report a false positive on correct output.

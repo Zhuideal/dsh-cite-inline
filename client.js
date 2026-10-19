@@ -54,7 +54,7 @@ const ASSISTANT_REPLY_SELECTOR = '[data-chat-flow-kind="assistant-step"]'
       style.textContent = [
         `[data-${ACTION_ID}] { position: fixed; z-index: 1; }`,
         `[data-${ACTION_ID}][hidden] { display: none !important; }`,
-        `[data-${ACTION_ID}] { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2, #000) 12%, transparent); border-radius: var(--dsw-radius-lg, 10px); background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #fff) 92%, transparent); box-shadow: var(--dsw-elevation-prominent, 0 6px 24px rgb(15 23 42 / 18%)); backdrop-filter: blur(2px) saturate(1.12); -webkit-backdrop-filter: blur(2px) saturate(1.12); transform: translate(-50%, -100%); }`,
+        `[data-${ACTION_ID}] { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2, #000) 12%, transparent); border-radius: var(--dsw-radius-lg, 10px); background: color-mix(in srgb, var(--dsw-alias-bg-layer-1, #fff) 92%, transparent); box-shadow: 0 0 0 .5px color-mix(in srgb, var(--dsw-alias-border-l2, #000) 40%, transparent), 0 3px 8px 0 #0000000a, 0 0 20px 0 #0000000d; backdrop-filter: blur(2px) saturate(1.12); -webkit-backdrop-filter: blur(2px) saturate(1.12); transform: translate(-50%, -100%); }`,
         `[data-${ACTION_ID}][data-placement="below"] { transform: translateX(-50%); }`,
         `[data-${ACTION_ID}] button { position: relative; overflow: hidden; border: 0; border-radius: var(--dsw-radius-md, 6px); background: transparent; color: var(--dsw-alias-label-primary, #17191c); font: inherit; }`,
         `[data-${ACTION_ID}] button { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 9px; cursor: pointer; font-size: 13px; white-space: nowrap; }`,
@@ -416,6 +416,7 @@ const ASSISTANT_REPLY_SELECTOR = '[data-chat-flow-kind="assistant-step"]'
         localeOff()
         inputOff?.()
         action.remove()
+        document.getElementById(STYLE_ID)?.remove()
       }
     }
 
