@@ -72,7 +72,7 @@ DSH 原生的 `.refChip` 是 `display: inline` + `white-space: inherit` + `overf
 | `/` | `∕`（除法斜杠） | 渲染器把它当文件路径，`displayLabel` 只保留最后一段，引用内容被悄悄截掉 |
 | `\` | `∕`（同上） | 同上：`displayLabel` 按 `[\\/]` 切分，Windows 路径（`C:\Users\…`）会让 chip 只剩最后一个反斜杠之后的文字 |
 
-后三条是实测发现的：`see src/client/foo.ts for details` 会被渲染成只有 `foo.ts for details`；`C:\Users\<user>\node_modules\dsh-quote-to-chat 是…` 会只剩 `dsh-quote-to-chat 是…`。用 `tools/sent-chip.test.mjs` 可以直接复现。
+后三条是实测发现的：`see src/client/foo.ts for details` 会被渲染成只有 `foo.ts for details`；`C:\Users\<用户名>\node_modules\dsh-quote-to-chat 是…` 会只剩 `dsh-quote-to-chat 是…`。用 `tools/sent-chip.test.mjs` 可以直接复现。
 
 ### token 前必须有一个分隔符
 
