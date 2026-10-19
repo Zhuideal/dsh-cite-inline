@@ -1,6 +1,6 @@
 {
   "name": "dsh-cite-inline",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "Inline citation for DSH: quote text from an assistant reply into the composer as a reference chip.",
   "type": "module",
