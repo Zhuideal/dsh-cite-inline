@@ -790,6 +790,54 @@ replaceOnce(
 // locale, SessionIdMenuItem in ui-workspace, last item of the ⋯ menu). Keeping
 // a second row with the same label only duplicated the built-in one.
 
+// ── patch 14: drop the locale keys and helpers the retired features owned ────
+// Patches 10 and 11 removed the marker / preview / rail code, but the strings
+// and helpers that only those features consumed were left behind. They are
+// unreachable now: nothing calls t() with these keys, and removeQuote() lost
+// both of its callers (the rail's "remove all" button and the preview's
+// per-quote "×"). CARD_SELECTOR addressed the composer card that only the
+// preview positioned itself against.
+//
+// Removing them is a pure deletion: every anchor below asserts the surrounding
+// code exists, and the sanity check at the end re-proves the survivor set, so a
+// future upstream refresh that reintroduces one of these features fails loudly
+// here instead of silently resurrecting dead code.
+const DEAD_LOCALE_KEYS = [
+  'selectedText',
+  'removeReference',
+  'addedOne',
+  'annotationOne',
+  'annotationMany',
+  'manageOne',
+  'manageMany',
+  'removeAll',
+  'quotePrefix',
+  'contextLabel',
+]
+for (const key of DEAD_LOCALE_KEYS) {
+  // Both dictionaries carry the key (zh and en), so this must be a global
+  // replace; a single-shot replace would silently leave the `en` copy behind.
+  const line = new RegExp('^[ \\t]+' + key + ": .*,\\n", 'gm')
+  const found = code.match(line)
+  if (found === null) throw new Error('dead locale key not found: ' + key)
+  if (found.length !== 2) throw new Error('dead locale key ' + key + ' appeared ' + found.length + ' times, expected 2 (zh + en)')
+  code = code.replace(line, '')
+  console.log('dropped locale key: ' + key + ' (zh + en)')
+}
+
+replaceOnce(
+  "    const CARD_SELECTOR = '[data-composer-card]'\n",
+  '',
+  'drop unused CARD_SELECTOR'
+)
+
+// removeQuote() is kept as a named anchor so its removal is provable: the whole
+// function body plus the blank line that separated it from its neighbour.
+const REMOVE_QUOTE = /      \/\*\*\n       \* Delete one chip by replacing its single editor placeholder character[\s\S]*?\n      \}\n\n/
+if (!REMOVE_QUOTE.test(code)) throw new Error('removeQuote anchor not found')
+code = code.replace(REMOVE_QUOTE, '')
+console.log('dropped unused removeQuote()')
+
 fs.mkdirSync(OUT_DIR, { recursive: true })
 fs.writeFileSync(OUT, code, 'utf8')
 console.log('\nwrote ' + OUT + ' (' + Buffer.byteLength(code, 'utf8') + ' bytes)')
@@ -809,6 +857,17 @@ if (codeOnly.includes('draftContexts')) problems.push('fork-only draftContexts s
 if (codeOnly.includes('getSnapshot().current')) problems.push('legacy .current lookup survived')
 if (!codeOnly.includes('data-chat-flow-kind')) problems.push('flow-kind selector missing')
 if (!codeOnly.includes('retainedBy')) problems.push('retainedBy fallback missing')
+// Patch 14 removed these; they must not come back through an upstream refresh.
+if (codeOnly.includes('removeQuote')) problems.push('retired removeQuote() survived')
+if (codeOnly.includes('CARD_SELECTOR')) problems.push('retired CARD_SELECTOR survived')
+// Match the dictionary-key SHAPE (indent + `key: 'value',`), not the bare
+// identifier: `selectedText` is also a live local variable, so a substring
+// check would report a false positive on correct output.
+for (const key of DEAD_LOCALE_KEYS) {
+  if (new RegExp('^[ \\t]+' + key + ": '[^']*',[ \\t]*$", 'm').test(codeOnly)) {
+    problems.push('retired locale key survived: ' + key)
+  }
+}
 if (problems.length > 0) {
   console.error('\nSANITY FAILED:\n  - ' + problems.join('\n  - '))
   process.exit(1)

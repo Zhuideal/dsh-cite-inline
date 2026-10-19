@@ -32,40 +32,19 @@ window.__ModuleLoader__.load({
 // is the chat surface's real DOM contract. Upstream used the fork-only
 // `data-dsh-message-role` attribute, which no stock DSH build emits.
 const ASSISTANT_REPLY_SELECTOR = '[data-chat-flow-kind="assistant-step"]'
-    const CARD_SELECTOR = '[data-composer-card]'
     const zh = Object.freeze({
       add: '添加到对话',
       copy: '复制',
       copied: '已复制',
       toolbarLabel: '选中文本操作',
-      selectedText: '所选文本：',
-      removeReference: '删除引用',
-      addedOne: '已添加 1 条引用',
-      annotationOne: '1 条注释',
-      annotationMany: '{count} 条注释',
-      manageOne: '管理 1 条注释',
-      manageMany: '管理 {count} 条注释',
-      removeAll: '删除全部引用',
       emptyQuote: '助手引用',
-      quotePrefix: '引用：{text}',
-      contextLabel: '引用助手回复：',
     })
     const en = Object.freeze({
       add: 'Add to chat',
       copy: 'Copy',
       copied: 'Copied',
       toolbarLabel: 'Selection actions',
-      selectedText: 'Selected text:',
-      removeReference: 'Remove reference',
-      addedOne: '1 reference added',
-      annotationOne: '1 annotation',
-      annotationMany: '{count} annotations',
-      manageOne: 'Manage 1 annotation',
-      manageMany: 'Manage {count} annotations',
-      removeAll: 'Remove all references',
       emptyQuote: 'Assistant quote',
-      quotePrefix: 'Quote: {text}',
-      contextLabel: 'Quoted assistant reply:',
     })
 
     function installStyle() {
@@ -250,25 +229,6 @@ const ASSISTANT_REPLY_SELECTOR = '[data-chat-flow-kind="assistant-step"]'
         return input?.state.getSnapshot().occurrences.filter(
           occurrence => occurrence.source === QUOTE_SOURCE,
         ) || []
-      }
-
-      /**
-       * Delete one chip by replacing its single editor placeholder character
-       * with nothing. Offsets arrive in clipboard coordinates, so preceding
-       * chips are collapsed back to one character each first.
-       */
-      function removeQuote(ref) {
-        const input = currentInput()
-        const snapshot = input?.state.getSnapshot()
-        if (snapshot === undefined) return
-        const index = snapshot.occurrences.findIndex(
-          occurrence => occurrence.source === QUOTE_SOURCE && occurrence.ref === ref,
-        )
-        if (index < 0) return
-        let start = snapshot.occurrences[index].offset
-        for (const earlier of snapshot.occurrences.slice(0, index)) start -= earlier.length - 1
-        if (input.insertText('', { start, end: start + 1, draftRev: snapshot.draftRev }) !== true) return
-        quotes.delete(ref)
       }
 
       /**
