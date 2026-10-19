@@ -283,6 +283,10 @@ const RC2 = {
     // displayLabel splits the label on [\\/] and keeps the LAST segment, so an
     // unnormalized Windows path collapses the chip to the text after its final
     // backslash. Both separators must be neutralized.
+    //
+    // The user segment is a placeholder, not a real account name: a literal
+    // `C:\Users\<name>\…` would publish whoever wrote the test, and the
+    // assertion does not depend on the name — only on the separators.
     h.select('C:\\Users\\<user>\\node_modules\\dsh-quote-to-chat is the target')
     h.button().click()
     const label = h.calls.at(-1).ref.label

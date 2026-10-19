@@ -129,6 +129,8 @@ node tools/smoke.mjs                             # 端到端走一遍四步交�
 
 `sent-chip.test.mjs` **直接从已安装的 DSH 里读取**官方 `ui-primitives` 包：优先 app.asar（可用 `DSH_ASAR` 指定路径），若该构建把客户端包放在 profile 的 `node_modules` 里，则回退到那里（可用 `DSH_PRIMITIVES` 指定 `lib/index.js`）。因此不会读到过期副本，换机器或换 DSH 版本也跑得起来。
 
+asar 的位置是**推导**出来的，不含任何写死的安装路径 —— DSH 安装器允许用户自选目录，写死路径只会在一台机器上生效。查找顺序：`DSH_ASAR` → 系统报告的标准位置（`LOCALAPPDATA\Programs`、`ProgramFiles`、`ProgramW6432`、`ProgramFiles(x86)`）→ 各固定盘符下的常规安装目录 → profile 的 `node_modules`。候选表惰性求值、命中即停，断连的网络映射盘不会被探测。
+
 **`tools/port.test.mjs`** —— 在一个**模仿官方 0.2.0-rc.2 契约的上下文**里加载真实 `client.js`，故意**不**提供 fork 专有的 `conversation.draftContexts` 与 `data-dsh-message-role`。因此一旦回退到 fork 契约，测试立刻失败。覆盖 21 项：启动不抛错、注册 `@` 引用源、从 `retainedBy.mainView` 定位会话、点击插入 chip、chip 带 `appearance:'session'`、codec 序列化成单个 `@"…"` token、多行选区折叠成单行、`clipboardText` 与标签一致、工具条含添加/复制两个动作、样式表同时覆盖两个面且只用官方 token、已废弃的 rail/marker/preview 不再挂载、非助手选区不触发、旧版 `current` 目录兼容、无会话时不插入、子 agent 会话不误判、删 chip 后引用失效、卸载清理；另有两项**反向**断言守住已退役的会话菜单行 —— 打包产物不得再出现 `sidebar.workspaces.session.menu.item` / `menuCopySessionId` / `CopySessionId`，且 `factory` 必须保持零参、不得出现 `require(`。
 
 **`tools/sent-chip.test.mjs`** —— 从 asar 里抽出的**真实 `projectUserText()` 源码**，喂给它 5 种选区（短句、长段、含引号、含斜杠、多行），断言每种都渲染成**恰好一枚 chip 且零泄漏**。这是唯一能挡住「引用在气泡里展开」这类回归的测试。

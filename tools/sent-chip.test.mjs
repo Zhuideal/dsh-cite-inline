@@ -36,13 +36,69 @@ function readFromAsar(asarPath, relPath) {
   }
 }
 
-const ASAR_CANDIDATES = [
-  process.env.DSH_ASAR,
-  'D:/Program/DeepSeek Harness/resources/app.asar',
-  'D:/Program/DSH Desktop/resources/app.asar',
-  'C:/Program Files/DeepSeek Harness/resources/app.asar',
-  'E:/program files/DeepSeek Harness/resources/app.asar',
-].filter(Boolean)
+// Where a DSH desktop install may keep its asar. Nothing here is a literal
+// install path: DSH's installer lets the user choose the location (this plugin
+// was developed against one on a non-system drive), so a baked-in list of
+// guessed folders would pass on the author's machine and SKIP on everyone
+// else's — and would publish that machine's layout for no benefit.
+//
+// Resolution order:
+//   1. DSH_ASAR, an explicit override;
+//   2. the folders the OS itself reports (LOCALAPPDATA / ProgramFiles / …);
+//   3. a bounded scan of the usual install folders on each fixed drive;
+//   4. the profile copies newer builds use (see PROFILE_PRIMITIVES below).
+const APP_NAMES = ['DeepSeek Harness', 'DSH Desktop']
+const ASAR_REL = join('resources', 'app.asar')
+// Windows paths are case-insensitive, so `Program Files` also matches
+// `program files` — no lowercase duplicates needed.
+const DRIVE_FOLDERS = ['Program Files', 'Program Files (x86)', 'Program', 'Programs', 'Apps', '']
+
+function envCandidates() {
+  const bases = [
+    process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, 'Programs'),
+    process.env.ProgramFiles,
+    process.env.ProgramW6432,
+    process.env['ProgramFiles(x86)'],
+  ].filter(Boolean)
+  return bases.flatMap(base => APP_NAMES.map(name => join(base, name, ASAR_REL)))
+}
+
+function* driveCandidates() {
+  if (process.platform !== 'win32') return
+  for (let code = 'A'.charCodeAt(0); code <= 'Z'.charCodeAt(0); code += 1) {
+    const drive = String.fromCharCode(code) + ':\\'
+    if (!existsSync(drive)) continue
+    for (const folder of DRIVE_FOLDERS) {
+      for (const name of APP_NAMES) yield join(drive, folder, name, ASAR_REL)
+    }
+  }
+}
+
+// Yields lazily, in resolution order, de-duplicated: a disconnected network
+// drive must not be probed at import time when the first candidate already
+// answers, so the drive scan only runs after the cheap lookups miss.
+function* asarCandidates() {
+  const seen = new Set()
+  const take = value => {
+    if (!value || seen.has(value)) return null
+    seen.add(value)
+    return value
+  }
+  const direct = take(process.env.DSH_ASAR)
+  if (direct) yield direct
+  for (const candidate of envCandidates()) {
+    const value = take(candidate)
+    if (value) yield value
+  }
+  for (const candidate of driveCandidates()) {
+    const value = take(candidate)
+    if (value) yield value
+  }
+}
+
+// Every path this suite would try, for the SKIP message. Only materialised
+// when nothing was found, so the expensive scan never delays a passing run.
+const allAsarCandidates = () => [...asarCandidates()]
 
 const PRIMITIVES_REL = '/dsh/node_modules/@deepseek-ai/dsh-client-ui-primitives/lib/index.js'
 
@@ -66,7 +122,7 @@ const PROFILE_PRIMITIVES = [
 
 let src
 let srcLabel
-for (const candidate of ASAR_CANDIDATES) {
+for (const candidate of asarCandidates()) {
   if (!existsSync(candidate)) continue
   try {
     src = readFromAsar(candidate, PRIMITIVES_REL)
@@ -91,7 +147,7 @@ if (src === undefined) {
         '      This is an environment gap, not a failure. Set DSH_PRIMITIVES to\n' +
         '      @deepseek-ai/dsh-client-ui-primitives/lib/index.js to run this suite.\n' +
         '      Tried:\n  ' +
-        [...ASAR_CANDIDATES, ...PROFILE_PRIMITIVES].join('\n  '),
+        [...allAsarCandidates(), ...PROFILE_PRIMITIVES].join('\n  '),
     )
     process.exit(0)
   }

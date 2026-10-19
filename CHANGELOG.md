@@ -3,6 +3,34 @@
 本文件记录 `dsh-cite-inline` 的每个版本改了什么、为什么改。
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## 未发布
+
+### 修复（隐私）
+
+**测试代码里不再出现开发机的真实账号名与安装路径。**
+
+两处硬编码：
+
+- `tools/port.test.mjs` 的「反斜杠不能截断胶囊标签」用例，选区字面量里嵌的是
+  开发机的**真实账号名**（`C:\Users\<name>\node_modules\…`）。断言只关心分隔符，
+  与账号名无关，已换成占位符 `C:\Users\<user>\…`。
+- `tools/sent-chip.test.mjs` 的 `ASAR_CANDIDATES` 列了 4 条写死的安装路径
+  （分别指向不同盘符下的 `Program Files` 与自建目录）。DSH 安装器允许用户自选目录，
+  写死路径既泄露了开发机的目录布局，又在别人机器上必然 SKIP。
+
+现在按顺序推导，全部来自环境或探测，无一条字面路径：
+
+1. `DSH_ASAR` 显式覆盖；
+2. 系统自己报告的位置（`LOCALAPPDATA\Programs`、`ProgramFiles`、`ProgramW6432`、
+   `ProgramFiles(x86)`）；
+3. 各固定盘符下的常规安装目录（`Program Files` / `Program` / `Programs` / `Apps` / 盘根）；
+4. profile 里的 `node_modules` 副本（原逻辑保留）。
+
+候选列表改为**惰性生成器**：命中即停，断连的网络映射盘不会被探测；只有全部落空、
+要打印 SKIP 清单时才完整展开。
+
+行为不变：三套测试仍全绿（契约 21 项、发送后渲染 25 组、smoke 端到端）。
+
 ## 0.2.0
 
 删掉「复制会话 ID」菜单行 —— 官方自己做了这一项，插件留着只会让菜单里出现两条同名项。
