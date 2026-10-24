@@ -19,7 +19,9 @@
     "client.js",
     "cordis.patch.yml",
     "docs",
-    "README.md"
+    "README.md",
+    "LICENSE",
+    "THIRD-PARTY-NOTICES.md"
   ],
   "keywords": [
     "dsh",

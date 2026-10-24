@@ -69,4 +69,4 @@ node tools/smoke.mjs                             # 端到端四步交互
 
 ## 许可证
 
-MIT。原始作品 © choco9527；本移植版按其 MIT 条款分发。
+[MIT](LICENSE)。原始作品 © choco9527（[dsh-add-to-chat](https://github.com/choco9527/dsh-add-to-chat)）；本移植版按其 MIT 条款分发，完整归属见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
